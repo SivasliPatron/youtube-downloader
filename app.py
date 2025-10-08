@@ -8,6 +8,8 @@ from pathlib import Path
 import time
 import hashlib
 import threading
+import json
+import tempfile
 
 app = Flask(__name__)
 CORS(app)
@@ -20,6 +22,21 @@ DOWNLOAD_FOLDER.mkdir(exist_ok=True)
 
 # Track downloads in progress
 downloads_status = {}
+
+# Setup cookies if provided via environment variable
+COOKIES_FILE = None
+if os.environ.get('YOUTUBE_COOKIES'):
+    try:
+        # Create temporary cookie file
+        COOKIES_FILE = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt')
+        # Decode base64 cookies if needed, or use raw
+        cookies_data = os.environ.get('YOUTUBE_COOKIES')
+        COOKIES_FILE.write(cookies_data)
+        COOKIES_FILE.close()
+        logger.info(f"Cookies loaded from environment variable: {COOKIES_FILE.name}")
+    except Exception as e:
+        logger.error(f"Failed to load cookies: {e}")
+        COOKIES_FILE = None
 
 def sanitize_filename(filename):
     filename = re.sub(r'[<>:"/\\|?*]', '', filename)
@@ -57,7 +74,7 @@ def get_video_info():
         
         logger.info(f"Info request: {url}")
         
-        # Use yt-dlp with PO Token support (automatic)
+        # Use yt-dlp with cookies if available
         ydl_opts = {
             'quiet': False,
             'no_warnings': False, 
@@ -66,13 +83,20 @@ def get_video_info():
             'extractor_retries': 3,
             'noplaylist': True,
             'nocheckcertificate': True,
-            # Use po_token auto-generation (requires latest yt-dlp)
+            # Use iOS client as fallback
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['ios', 'android', 'web'],
+                    'player_client': ['ios', 'android'],
                 }
             },
         }
+        
+        # Add cookies if available
+        if COOKIES_FILE:
+            ydl_opts['cookiefile'] = COOKIES_FILE.name
+            logger.info("Using cookies for authentication")
+        else:
+            logger.warning("No cookies available - may encounter bot detection")
         
         logger.info("Starting yt-dlp extraction...")
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -140,7 +164,7 @@ def _download_worker(download_id, url, format_type):
     try:
         downloads_status[download_id]['status'] = 'fetching_info'
         
-        # Use yt-dlp with PO Token support
+        # Use yt-dlp with cookies if available
         ydl_opts_info = {
             'quiet': True,
             'socket_timeout': 60,
@@ -150,10 +174,13 @@ def _download_worker(download_id, url, format_type):
             # Use iOS/Android clients
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['ios', 'android', 'web'],
+                    'player_client': ['ios', 'android'],
                 }
             },
         }
+        
+        if COOKIES_FILE:
+            ydl_opts_info['cookiefile'] = COOKIES_FILE.name
         
         with yt_dlp.YoutubeDL(ydl_opts_info) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -186,6 +213,9 @@ def _download_worker(download_id, url, format_type):
                     }
                 },
             }
+            
+            if COOKIES_FILE:
+                ydl_opts['cookiefile'] = COOKIES_FILE.name
         else:
             filename = f"{title}_{format_type}.mp4"
             filepath = DOWNLOAD_FOLDER / filename
@@ -219,6 +249,9 @@ def _download_worker(download_id, url, format_type):
                     }
                 },
             }
+            
+            if COOKIES_FILE:
+                ydl_opts['cookiefile'] = COOKIES_FILE.name
         
         logger.info(f"Downloading {download_id}: {filename}")
         
