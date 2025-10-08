@@ -57,7 +57,7 @@ def get_video_info():
             'quiet': False,
             'no_warnings': False, 
             'skip_download': True,
-            'socket_timeout': 15,
+            'socket_timeout': 30,
             'extractor_retries': 2,
             'legacy_server_connect': True,
             'noplaylist': True,  # Only download single video, not playlist
@@ -100,7 +100,7 @@ def download_video():
         
         ydl_opts_info = {
             'quiet': True,
-            'socket_timeout': 30,
+            'socket_timeout': 60,
             'no_check_certificate': True,
             'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'noplaylist': True,  # Only download single video
@@ -126,7 +126,7 @@ def download_video():
                 }],
                 'outtmpl': str(filepath.with_suffix('')),
                 'quiet': True,
-                'socket_timeout': 30,
+                'socket_timeout': 120,
                 'noplaylist': True,
                 'no_abort_on_error': True,
             }
@@ -154,7 +154,7 @@ def download_video():
                 'prefer_free_formats': False,
                 'quiet': False,  # Temporär auf False für besseres Debugging
                 'verbose': True,  # Zeigt welches Format heruntergeladen wird
-                'socket_timeout': 30,
+                'socket_timeout': 120,
                 'noplaylist': True,
                 'no_abort_on_error': True,
             }
