@@ -66,26 +66,79 @@
         document.querySelectorAll('.format-btn').forEach(btn => { btn.addEventListener('click', () => { document.querySelectorAll('.format-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); format = btn.dataset.format; }); });
         document.getElementById('videoUrl').addEventListener('keypress', e => { if (e.key === 'Enter') download(); });
         document.getElementById('downloadBtn').addEventListener('click', download);
+        
         async function download() {
             const url = document.getElementById('videoUrl').value.trim();
             if (!url) { showStatus('Bitte URL eingeben', 'error'); return; }
             setLoading(true); hideInfo(); showStatus('Lade Informationen...', 'info');
+            
             try {
-                const info = await fetch(`${API}/info`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({url}) });
-                if (!info.ok) throw new Error('Video nicht gefunden');
-                const data = await info.json();
+                // Get video info
+                const infoRes = await fetch(`${API}/info`, { 
+                    method: 'POST', 
+                    headers: {'Content-Type': 'application/json'}, 
+                    body: JSON.stringify({url}) 
+                });
+                if (!infoRes.ok) throw new Error('Video nicht gefunden');
+                const data = await infoRes.json();
                 showInfo(data);
-                showStatus('Download läuft...', 'info');
-                const dl = await fetch(`${API}/download`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({url, format}) });
-                if (!dl.ok) throw new Error('Download fehlgeschlagen');
-                const blob = await dl.blob();
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
-                link.download = `video.${format === 'mp3' ? 'mp3' : 'mp4'}`;
-                link.click();
-                showStatus('✅ Download erfolgreich!', 'success');
-            } catch (e) { showStatus(`Fehler: ${e.message}`, 'error'); } finally { setLoading(false); }
+                
+                // Start download
+                showStatus('Download wird gestartet...', 'info');
+                const dlRes = await fetch(`${API}/download`, { 
+                    method: 'POST', 
+                    headers: {'Content-Type': 'application/json'}, 
+                    body: JSON.stringify({url, format}) 
+                });
+                if (!dlRes.ok) throw new Error('Download konnte nicht gestartet werden');
+                const dlData = await dlRes.json();
+                const downloadId = dlData.download_id;
+                
+                // Poll for completion
+                await pollDownloadStatus(downloadId);
+                
+            } catch (e) { 
+                showStatus(`Fehler: ${e.message}`, 'error'); 
+            } finally { 
+                setLoading(false); 
+            }
         }
+        
+        async function pollDownloadStatus(downloadId) {
+            const maxAttempts = 120; // 10 minutes max
+            let attempts = 0;
+            
+            while (attempts < maxAttempts) {
+                try {
+                    const statusRes = await fetch(`${API}/status/${downloadId}`);
+                    if (!statusRes.ok) throw new Error('Status check failed');
+                    const status = await statusRes.json();
+                    
+                    if (status.status === 'completed') {
+                        showStatus('Download abgeschlossen! Datei wird heruntergeladen...', 'success');
+                        // Trigger file download
+                        window.location.href = `${API}/file/${downloadId}`;
+                        showStatus('✅ Download erfolgreich!', 'success');
+                        return;
+                    } else if (status.status === 'error') {
+                        throw new Error(status.error || 'Download fehlgeschlagen');
+                    } else if (status.status === 'downloading') {
+                        showStatus('Download läuft... Bitte warten...', 'info');
+                    } else if (status.status === 'fetching_info') {
+                        showStatus('Rufe Video-Informationen ab...', 'info');
+                    }
+                    
+                    await new Promise(resolve => setTimeout(resolve, 5000)); // Check every 5 seconds
+                    attempts++;
+                    
+                } catch (e) {
+                    throw new Error(`Status-Fehler: ${e.message}`);
+                }
+            }
+            
+            throw new Error('Download-Timeout - bitte versuchen Sie es erneut');
+        }
+        
         function showInfo(info) { document.getElementById('thumbnail').src = info.thumbnail; document.getElementById('videoTitle').textContent = info.title; document.getElementById('channel').textContent = info.channel; document.getElementById('videoInfo').classList.add('show'); }
         function hideInfo() { document.getElementById('videoInfo').classList.remove('show'); }
         function showStatus(msg, type) { const s = document.getElementById('status'); s.textContent = msg; s.className = `status show ${type}`; }

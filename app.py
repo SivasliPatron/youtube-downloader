@@ -6,6 +6,8 @@ import re
 import logging
 from pathlib import Path
 import time
+import hashlib
+import threading
 
 app = Flask(__name__)
 CORS(app)
@@ -15,6 +17,9 @@ logger = logging.getLogger(__name__)
 
 DOWNLOAD_FOLDER = Path('downloads')
 DOWNLOAD_FOLDER.mkdir(exist_ok=True)
+
+# Track downloads in progress
+downloads_status = {}
 
 def sanitize_filename(filename):
     filename = re.sub(r'[<>:"/\\|?*]', '', filename)
@@ -88,6 +93,7 @@ def get_video_info():
 
 @app.route('/api/download', methods=['POST'])
 def download_video():
+    """Start async download and return download ID"""
     try:
         data = request.get_json()
         url = data.get('url', '').strip()
@@ -96,22 +102,51 @@ def download_video():
         if not url:
             return jsonify({'error': 'No URL'}), 400
         
-        logger.info(f"Download request: {format_type} from {url}")
+        # Create unique download ID
+        download_id = hashlib.md5(f"{url}{format_type}{time.time()}".encode()).hexdigest()
+        
+        logger.info(f"Starting download {download_id}: {format_type} from {url}")
+        
+        # Initialize status
+        downloads_status[download_id] = {
+            'status': 'starting',
+            'progress': 0,
+            'filename': None,
+            'filepath': None
+        }
+        
+        # Start download in background thread
+        thread = threading.Thread(target=_download_worker, args=(download_id, url, format_type))
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({
+            'download_id': download_id,
+            'status': 'started'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error starting download: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+def _download_worker(download_id, url, format_type):
+    """Background worker to download video"""
+    try:
+        downloads_status[download_id]['status'] = 'fetching_info'
         
         ydl_opts_info = {
             'quiet': True,
             'socket_timeout': 60,
             'no_check_certificate': True,
             'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'noplaylist': True,  # Only download single video
+            'noplaylist': True,
         }
         
-        logger.info("Fetching video title...")
         with yt_dlp.YoutubeDL(ydl_opts_info) as ydl:
             info = ydl.extract_info(url, download=False)
             title = sanitize_filename(info.get('title', 'video'))
         
-        logger.info(f"Title: {title}")
+        downloads_status[download_id]['status'] = 'downloading'
         
         if format_type == 'mp3':
             filename = f"{title}.mp3"
@@ -131,16 +166,14 @@ def download_video():
                 'no_abort_on_error': True,
             }
         else:
-            # Eindeutiger Dateiname mit Qualität, um Cache-Probleme zu vermeiden
             filename = f"{title}_{format_type}.mp4"
             filepath = DOWNLOAD_FOLDER / filename
             
-            # Flexiblere Format-Spezifikation für zuverlässige Downloads
             quality_map = {
                 '1080p': 'bestvideo[height<=1080]+bestaudio/best[height<=1080]',
-                '720p': 'bestvideo[height<=720][height>=720]+bestaudio/bestvideo[height<=720]+bestaudio/best[height<=720]',
-                '480p': 'bestvideo[height<=480][height>=480]+bestaudio/bestvideo[height<=480]+bestaudio/best[height<=480]',
-                '360p': 'bestvideo[height<=360][height>=360]+bestaudio/bestvideo[height<=360]+bestaudio/best[height<=360]',
+                '720p': 'bestvideo[height<=720]+bestaudio/best[height<=720]',
+                '480p': 'bestvideo[height<=480]+bestaudio/best[height<=480]',
+                '360p': 'bestvideo[height<=360]+bestaudio/best[height<=360]',
             }
             
             ydl_opts = {
@@ -152,24 +185,63 @@ def download_video():
                     'preferedformat': 'mp4',
                 }],
                 'prefer_free_formats': False,
-                'quiet': False,  # Temporär auf False für besseres Debugging
-                'verbose': True,  # Zeigt welches Format heruntergeladen wird
+                'quiet': True,
                 'socket_timeout': 120,
                 'noplaylist': True,
                 'no_abort_on_error': True,
             }
         
-        logger.info(f"Downloading: {filename}")
+        logger.info(f"Downloading {download_id}: {filename}")
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
         
         if not filepath.exists():
-            return jsonify({'error': 'Download failed'}), 500
+            downloads_status[download_id]['status'] = 'error'
+            downloads_status[download_id]['error'] = 'Download failed'
+            return
         
-        logger.info(f"Success: {filename}")
+        downloads_status[download_id].update({
+            'status': 'completed',
+            'filename': filename,
+            'filepath': str(filepath),
+            'progress': 100
+        })
         
-        mimetype = 'audio/mpeg' if format_type == 'mp3' else 'video/mp4'
+        logger.info(f"Download {download_id} completed: {filename}")
+        
+    except Exception as e:
+        logger.error(f"Error in download worker {download_id}: {e}", exc_info=True)
+        downloads_status[download_id]['status'] = 'error'
+        downloads_status[download_id]['error'] = str(e)
+
+@app.route('/api/status/<download_id>', methods=['GET'])
+def check_status(download_id):
+    """Check download status"""
+    if download_id not in downloads_status:
+        return jsonify({'error': 'Download not found'}), 404
+    
+    return jsonify(downloads_status[download_id])
+
+@app.route('/api/file/<download_id>', methods=['GET'])
+def get_file(download_id):
+    """Download the completed file"""
+    try:
+        if download_id not in downloads_status:
+            return jsonify({'error': 'Download not found'}), 404
+        
+        status = downloads_status[download_id]
+        
+        if status['status'] != 'completed':
+            return jsonify({'error': 'Download not ready', 'status': status['status']}), 400
+        
+        filepath = Path(status['filepath'])
+        filename = status['filename']
+        
+        if not filepath.exists():
+            return jsonify({'error': 'File not found'}), 404
+        
+        mimetype = 'audio/mpeg' if filename.endswith('.mp3') else 'video/mp4'
         response = send_file(filepath, as_attachment=True, download_name=filename, mimetype=mimetype)
         
         @response.call_on_close
@@ -178,13 +250,15 @@ def download_video():
                 time.sleep(2)
                 if filepath.exists():
                     filepath.unlink()
+                if download_id in downloads_status:
+                    del downloads_status[download_id]
             except Exception as e:
                 logger.error(f"Cleanup error: {e}")
         
         return response
         
     except Exception as e:
-        logger.error(f"Error in download_video: {e}", exc_info=True)
+        logger.error(f"Error serving file: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
