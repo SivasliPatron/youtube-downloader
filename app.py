@@ -57,30 +57,20 @@ def get_video_info():
         
         logger.info(f"Info request: {url}")
         
-        # Enhanced options to bypass YouTube bot detection
+        # Use yt-dlp with PO Token support (automatic)
         ydl_opts = {
             'quiet': False,
             'no_warnings': False, 
             'skip_download': True,
             'socket_timeout': 30,
             'extractor_retries': 3,
-            'legacy_server_connect': True,
             'noplaylist': True,
             'nocheckcertificate': True,
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'referer': 'https://www.youtube.com/',
-            # Critical: Use alternative extractors and methods
+            # Use po_token auto-generation (requires latest yt-dlp)
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android', 'web'],
-                    'player_skip': ['webpage', 'configs'],
+                    'player_client': ['ios', 'android', 'web'],
                 }
-            },
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-us,en;q=0.5',
-                'Sec-Fetch-Mode': 'navigate',
             },
         }
         
@@ -150,27 +140,18 @@ def _download_worker(download_id, url, format_type):
     try:
         downloads_status[download_id]['status'] = 'fetching_info'
         
-        # Enhanced options to bypass YouTube bot detection
+        # Use yt-dlp with PO Token support
         ydl_opts_info = {
             'quiet': True,
             'socket_timeout': 60,
             'nocheckcertificate': True,
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'referer': 'https://www.youtube.com/',
             'noplaylist': True,
             'extractor_retries': 3,
-            # Critical: Use alternative extractors
+            # Use iOS/Android clients
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android', 'web'],
-                    'player_skip': ['webpage', 'configs'],
+                    'player_client': ['ios', 'android', 'web'],
                 }
-            },
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-us,en;q=0.5',
-                'Sec-Fetch-Mode': 'navigate',
             },
         }
         
@@ -198,17 +179,11 @@ def _download_worker(download_id, url, format_type):
                 'no_abort_on_error': True,
                 'nocheckcertificate': True,
                 'extractor_retries': 3,
-                # Use Android client for downloads
+                # Use iOS client (most reliable)
                 'extractor_args': {
                     'youtube': {
-                        'player_client': ['android', 'web'],
-                        'player_skip': ['webpage', 'configs'],
+                        'player_client': ['ios', 'android'],
                     }
-                },
-                'http_headers': {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                    'Accept-Language': 'en-us,en;q=0.5',
                 },
             }
         else:
@@ -237,17 +212,11 @@ def _download_worker(download_id, url, format_type):
                 'no_abort_on_error': True,
                 'nocheckcertificate': True,
                 'extractor_retries': 3,
-                # Use Android client for downloads
+                # Use iOS client (most reliable)
                 'extractor_args': {
                     'youtube': {
-                        'player_client': ['android', 'web'],
-                        'player_skip': ['webpage', 'configs'],
+                        'player_client': ['ios', 'android'],
                     }
-                },
-                'http_headers': {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                    'Accept-Language': 'en-us,en;q=0.5',
                 },
             }
         
