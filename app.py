@@ -57,15 +57,24 @@ def get_video_info():
         
         logger.info(f"Info request: {url}")
         
-        # Simplified options to avoid hanging
+        # Enhanced options to bypass YouTube bot detection
         ydl_opts = {
             'quiet': False,
             'no_warnings': False, 
             'skip_download': True,
             'socket_timeout': 30,
-            'extractor_retries': 2,
+            'extractor_retries': 3,
             'legacy_server_connect': True,
-            'noplaylist': True,  # Only download single video, not playlist
+            'noplaylist': True,
+            'nocheckcertificate': True,
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'referer': 'https://www.youtube.com/',
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-us,en;q=0.5',
+                'Sec-Fetch-Mode': 'navigate',
+            },
         }
         
         logger.info("Starting yt-dlp extraction...")
@@ -134,12 +143,21 @@ def _download_worker(download_id, url, format_type):
     try:
         downloads_status[download_id]['status'] = 'fetching_info'
         
+        # Enhanced options to bypass YouTube bot detection
         ydl_opts_info = {
             'quiet': True,
             'socket_timeout': 60,
-            'no_check_certificate': True,
+            'nocheckcertificate': True,
             'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'referer': 'https://www.youtube.com/',
             'noplaylist': True,
+            'extractor_retries': 3,
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-us,en;q=0.5',
+                'Sec-Fetch-Mode': 'navigate',
+            },
         }
         
         with yt_dlp.YoutubeDL(ydl_opts_info) as ydl:
@@ -164,6 +182,13 @@ def _download_worker(download_id, url, format_type):
                 'socket_timeout': 120,
                 'noplaylist': True,
                 'no_abort_on_error': True,
+                'nocheckcertificate': True,
+                'extractor_retries': 3,
+                'http_headers': {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Accept-Language': 'en-us,en;q=0.5',
+                },
             }
         else:
             filename = f"{title}_{format_type}.mp4"
@@ -189,6 +214,13 @@ def _download_worker(download_id, url, format_type):
                 'socket_timeout': 120,
                 'noplaylist': True,
                 'no_abort_on_error': True,
+                'nocheckcertificate': True,
+                'extractor_retries': 3,
+                'http_headers': {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Accept-Language': 'en-us,en;q=0.5',
+                },
             }
         
         logger.info(f"Downloading {download_id}: {filename}")
